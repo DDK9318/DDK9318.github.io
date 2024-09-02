@@ -1,0 +1,584 @@
+<!DOCTYPE html><html lang="zh-CN" data-theme="light"><head><meta charset="UTF-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width, initial-scale=1.0,viewport-fit=cover"><title>Kworker 后门程序分析 | ddk9318</title><meta name="author" content="ddk9318"><meta name="copyright" content="ddk9318"><meta name="format-detection" content="telephone=no"><meta name="theme-color" content="#ffffff"><meta name="description" content="Kworker 后门程序分析kworker即Kernel Worker，kworker是3.x内核引入的。 0x01 摘要2022年10月，银弹实验室风神平台监测到将近800+Cisco路由器设备陆续被植入名为“bioset2”的程序。  经进一步观测，被植入程序的Cisco设备全部开启30000至40000之间的随机端口，不断有全球的物联网设备与这些端口进行网络通联。同时，这批设备也会主动与全球">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Kworker 后门程序分析">
+<meta property="og:url" content="https://ddk9318.github.io/2024/09/02/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/index.html">
+<meta property="og:site_name" content="ddk9318">
+<meta property="og:description" content="Kworker 后门程序分析kworker即Kernel Worker，kworker是3.x内核引入的。 0x01 摘要2022年10月，银弹实验室风神平台监测到将近800+Cisco路由器设备陆续被植入名为“bioset2”的程序。  经进一步观测，被植入程序的Cisco设备全部开启30000至40000之间的随机端口，不断有全球的物联网设备与这些端口进行网络通联。同时，这批设备也会主动与全球">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://ddk9318.github.io/img/small%20hali.png">
+<meta property="article:published_time" content="2024-09-02T12:55:50.000Z">
+<meta property="article:modified_time" content="2024-09-02T13:31:19.009Z">
+<meta property="article:author" content="ddk9318">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://ddk9318.github.io/img/small%20hali.png"><link rel="shortcut icon" href="/img/favicon.png"><link rel="canonical" href="https://ddk9318.github.io/2024/09/02/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/index.html"><link rel="preconnect" href="//cdn.jsdelivr.net"/><link rel="stylesheet" href="/css/index.css?v=4.13.0"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css"><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.33/dist/fancybox/fancybox.min.css" media="print" onload="this.media='all'"><script>const GLOBAL_CONFIG = {
+  root: '/',
+  algolia: undefined,
+  localSearch: undefined,
+  translate: undefined,
+  noticeOutdate: undefined,
+  highlight: {"plugin":"highlight.js","highlightCopy":true,"highlightLang":true,"highlightHeightLimit":false},
+  copy: {
+    success: '复制成功',
+    error: '复制错误',
+    noSupport: '浏览器不支持'
+  },
+  relativeDate: {
+    homepage: false,
+    post: false
+  },
+  runtime: '',
+  dateSuffix: {
+    just: '刚刚',
+    min: '分钟前',
+    hour: '小时前',
+    day: '天前',
+    month: '个月前'
+  },
+  copyright: undefined,
+  lightbox: 'fancybox',
+  Snackbar: undefined,
+  infinitegrid: {
+    js: 'https://cdn.jsdelivr.net/npm/@egjs/infinitegrid@4.11.1/dist/infinitegrid.min.js',
+    buttonText: '加载更多'
+  },
+  isPhotoFigcaption: false,
+  islazyload: false,
+  isAnchor: false,
+  percent: {
+    toc: true,
+    rightside: true,
+  },
+  autoDarkmode: false
+}</script><script id="config-diff">var GLOBAL_CONFIG_SITE = {
+  title: 'Kworker 后门程序分析',
+  isPost: true,
+  isHome: false,
+  isHighlightShrink: false,
+  isToc: true,
+  postUpdate: '2024-09-02 21:31:19'
+}</script><script>(win=>{
+      win.saveToLocal = {
+        set: (key, value, ttl) => {
+          if (ttl === 0) return
+          const now = Date.now()
+          const expiry = now + ttl * 86400000
+          const item = {
+            value,
+            expiry
+          }
+          localStorage.setItem(key, JSON.stringify(item))
+        },
+      
+        get: key => {
+          const itemStr = localStorage.getItem(key)
+      
+          if (!itemStr) {
+            return undefined
+          }
+          const item = JSON.parse(itemStr)
+          const now = Date.now()
+      
+          if (now > item.expiry) {
+            localStorage.removeItem(key)
+            return undefined
+          }
+          return item.value
+        }
+      }
+    
+      win.getScript = (url, attr = {}) => new Promise((resolve, reject) => {
+        const script = document.createElement('script')
+        script.src = url
+        script.async = true
+        script.onerror = reject
+        script.onload = script.onreadystatechange = function() {
+          const loadState = this.readyState
+          if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+          script.onload = script.onreadystatechange = null
+          resolve()
+        }
+
+        Object.keys(attr).forEach(key => {
+          script.setAttribute(key, attr[key])
+        })
+
+        document.head.appendChild(script)
+      })
+    
+      win.getCSS = (url, id = false) => new Promise((resolve, reject) => {
+        const link = document.createElement('link')
+        link.rel = 'stylesheet'
+        link.href = url
+        if (id) link.id = id
+        link.onerror = reject
+        link.onload = link.onreadystatechange = function() {
+          const loadState = this.readyState
+          if (loadState && loadState !== 'loaded' && loadState !== 'complete') return
+          link.onload = link.onreadystatechange = null
+          resolve()
+        }
+        document.head.appendChild(link)
+      })
+    
+      win.activateDarkMode = () => {
+        document.documentElement.setAttribute('data-theme', 'dark')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#0d0d0d')
+        }
+      }
+      win.activateLightMode = () => {
+        document.documentElement.setAttribute('data-theme', 'light')
+        if (document.querySelector('meta[name="theme-color"]') !== null) {
+          document.querySelector('meta[name="theme-color"]').setAttribute('content', '#ffffff')
+        }
+      }
+      const t = saveToLocal.get('theme')
+    
+        if (t === 'dark') activateDarkMode()
+        else if (t === 'light') activateLightMode()
+      
+      const asideStatus = saveToLocal.get('aside-status')
+      if (asideStatus !== undefined) {
+        if (asideStatus === 'hide') {
+          document.documentElement.classList.add('hide-aside')
+        } else {
+          document.documentElement.classList.remove('hide-aside')
+        }
+      }
+    
+      const detectApple = () => {
+        if(/iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent)){
+          document.documentElement.classList.add('apple')
+        }
+      }
+      detectApple()
+    })(window)</script><meta name="generator" content="Hexo 7.3.0"></head><body><div id="sidebar"><div id="menu-mask"></div><div id="sidebar-menus"><div class="avatar-img is-center"><img src="/img/small%20hali.png" onerror="onerror=null;src='/img/friend_404.gif'" alt="avatar"/></div><div class="sidebar-site-data site-data is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">6</div></a><a href="/tags/"><div class="headline">标签</div><div class="length-num">0</div></a><a href="/categories/"><div class="headline">分类</div><div class="length-num">0</div></a></div><hr class="custom-hr"/><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div></div></div></div><div class="post" id="body-wrap"><header class="not-top-img" id="page-header"><nav id="nav"><span id="blog-info"><a href="/" title="ddk9318"><span class="site-name">ddk9318</span></a></span><div id="menus"><div class="menus_items"><div class="menus_item"><a class="site-page" href="/"><i class="fa-fw fas fa-home"></i><span> Home</span></a></div></div><div id="toggle-menu"><a class="site-page" href="javascript:void(0);"><i class="fas fa-bars fa-fw"></i></a></div></div></nav></header><main class="layout" id="content-inner"><div id="post"><div id="post-info"><h1 class="post-title">Kworker 后门程序分析</h1><div id="post-meta"><div class="meta-firstline"><!--if (theme.post_meta.post.date_type)span.post-meta-date
+  if (theme.post_meta.post.date_type === 'both')
+    i.far.fa-calendar-alt.fa-fw.post-meta-icon
+    span.post-meta-label= _p('post.created')
+    time.post-meta-date-created(datetime=date_xml(page.date) title=_p('post.created') + ' ' + full_date(page.date))=date(page.date, config.date_format)
+    span.post-meta-separator |
+    i.fas.fa-history.fa-fw.post-meta-icon
+    span.post-meta-label= _p('post.updated')
+    time.post-meta-date-updated(datetime=date_xml(page.updated) title=_p('post.updated') + ' ' + full_date(page.updated))=date(page.updated, config.date_format)
+  else
+    - let data_type_update = theme.post_meta.post.date_type === 'updated'
+    - let date_type = data_type_update ? 'updated' : 'date'
+    - let date_icon = data_type_update ? 'fas fa-history' :'far fa-calendar-alt'
+    - let date_title = data_type_update ? _p('post.updated') : _p('post.created')
+    i.fa-fw.post-meta-icon(class=date_icon)
+    span.post-meta-label= date_title
+    time(datetime=date_xml(page[date_type]) title=date_title + ' ' + full_date(page[date_type]))=date(page[date_type], config.date_format)--></div><div class="meta-secondline"></div></div></div><article class="post-content" id="article-container"><h1 id="Kworker-后门程序分析"><a href="#Kworker-后门程序分析" class="headerlink" title="Kworker 后门程序分析"></a>Kworker 后门程序分析</h1><p>kworker即Kernel Worker，kworker是3.x内核引入的。</p>
+<h2 id="0x01-摘要"><a href="#0x01-摘要" class="headerlink" title="0x01 摘要"></a>0x01 摘要</h2><p>2022年10月，银弹实验室风神平台监测到将近800+Cisco路由器设备陆续被植入名为“bioset2”的程序。</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/1.png"></p>
+<p>经进一步观测，被植入程序的Cisco设备全部开启30000至40000之间的随机端口，不断有全球的物联网设备与这些端口进行网络通联。同时，这批设备也会主动与全球的若干物联网设备的30000至40000之间的网络端口建立网络通信。</p>
+<p>全球不同地区的不同品牌的物联网设备之间的网络互联的异常现象引起了我们的注意，我们决定从数据和样本2个方向对该事件进行深入分析。</p>
+<h2 id="0x02-后门程序概览"><a href="#0x02-后门程序概览" class="headerlink" title="0x02 后门程序概览"></a>0x02 后门程序概览</h2><p>经过一番努力，我们成功地在受入侵的设备上提取了第一和第二阶段的后门文件，同时利用 https 蜜罐顺利捕获到了攻击者用于控制设备的漏洞Exp。 </p>
+<table>
+<thead>
+<tr>
+<th>后门名称</th>
+<th>架构</th>
+<th>Hash	用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>w.sh</td>
+<td>Shell</td>
+<td>7E81BA001817BF0B62633CD1C263E70E</td>
+</tr>
+<tr>
+<td>bioset2</td>
+<td>MIPS</td>
+<td>F2838F38E238A644B695FB9530CC0EDB</td>
+</tr>
+<tr>
+<td>-</td>
+<td>MIPS</td>
+<td>AA9FFE7F6AA398F37310B286ECE168CB</td>
+</tr>
+</tbody></table>
+<p>下图为蜜罐捕获到的漏洞Payload，负责从下载服务器下载Shell脚本并执行。</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/3.png"></p>
+<p>下图为w.sh的主要代码片段，功能是从下载服务器下载文件并执行。</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/4.png"></p>
+<p>上图中的&#x2F;tmp&#x2F;bioset2即为第一阶段后门，真正的第二阶段后门是它的命令行参数中的&#x2F;mips&#x2F;m文件。在取证过程中无法直接从上述路径下载到第二阶段后门，团队直接从第一阶段后门进程的内存中dump出了第二阶段后门文件。</p>
+<h2 id="0x04-后门程序分析"><a href="#0x04-后门程序分析" class="headerlink" title="0x04 后门程序分析"></a>0x04 后门程序分析</h2><h3 id="4-1-Kworker22-的工作过程"><a href="#4-1-Kworker22-的工作过程" class="headerlink" title="4.1 Kworker22 的工作过程"></a>4.1 Kworker22 的工作过程</h3><p>Kworker22 的工作分为两个阶段，由两个不同的程序完成。</p>
+<p>第一阶段程序的主要工作是准备运行环境，与 C2 建立连接，在收到 C2 发送的第二阶段程序后将它加载到内存并执行。</p>
+<p>第二阶段程序的主要工作是接收攻击者发送的数据并选择执行不同的功能，实现的功能包括远程命令执行，socks5 代理，信息收集等。</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/5.png"></p>
+<h3 id="4-2-Stage1阶段后门程序"><a href="#4-2-Stage1阶段后门程序" class="headerlink" title="4.2 Stage1阶段后门程序"></a>4.2 Stage1阶段后门程序</h3><h4 id="4-2-1-前期准备工作"><a href="#4-2-1-前期准备工作" class="headerlink" title="4.2.1 前期准备工作"></a>4.2.1 前期准备工作</h4><p>首先，Stage1阶段的后门程序通过 main 函数中的 argv 参数得到自身的文件路径，然后使用 rmdir 函数删除自身的磁盘文件，使得进程以Memory-Only不落盘的形式存在。</p>
+<p>然后，进行命令行参数检查，检测是否满足以下条件：</p>
+<p>1）命令行参数个数为2 </p>
+<p>2）参数的长度小于 0x104 个字节 </p>
+<p>3）先后出现 “ :” 和 “&#x2F;”字符（这个部分使用 strchr 函数实现条件判断）。</p>
+<p>最后，用 0 覆盖保存在 argv 中的进程路径，然后将字符串 “[kworker&#x2F;02:02]” 拷贝到 argv 中保存进程名的位置，最后使用 prctl 函数将字符串设置为进程的常用名。</p>
+<h4 id="4-2-2-C2交互"><a href="#4-2-2-C2交互" class="headerlink" title="4.2.2  C2交互"></a>4.2.2  C2交互</h4><p>在完成前期准备工作后，Stage1阶段的后门程序会与 C2 服务器进行通信，最终目的是下载Stage2阶段的后门程序。在下载Stage2阶段的后门程序前，共会进行3轮数据交互，期间Stage1阶段的后门程序通过判断当前交互次数来决定如何处理数据以及发送什么数据给 C2。整体的交互过程如下图所示：</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/6.png"></p>
+<p>第一次与 C2 建立连接后，Stage1阶段后门程序会发送一段22 字节的数据（包括一部分随机数，设备的 Mac 地址和 C2 端口等），发送数据的格式如下所示：</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/7.png"></p>
+<p>第一次接收到 C2 的响应数据后，Stage1阶段后门程序将 4 字节的接收数据，上一次发送的随机数 2 和新生成随机数 3 进行加密并发送。加密逻辑如下图所示：</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/8.png"></p>
+<p>第二次接收 C2 的响应数据后，Stage1阶段后门程序先解密接收的数据，然后验证收到的随机数与上一次交互时发送的随机数 3 是否相同，相同则将第二阶段后门程序的启动参数加密发送到C2。</p>
+<p>第三次接收 C2 的响应数据后，Stage1阶段后门程序先解密接收的数据，从中取出第二阶段程序的启动参数和第二阶段程序的大小，对比接收的启动参数是否与上一次发送的参数相同，然后根据样本大小申请用于存储第二阶段程序的内存空间。</p>
+<p>第四次接收 C2 的响应数据为加密后的第二阶段后门程序，Stage1阶段后门程序先解密Stage2阶段的后门程序，然后拷贝到之前申请的内存里，最后检查Stage2阶段后门程序的格式并加载运行。</p>
+<h4 id="4-2-3-加载Stage2阶段后门程序"><a href="#4-2-3-加载Stage2阶段后门程序" class="headerlink" title="4.2.3 加载Stage2阶段后门程序"></a>4.2.3 加载Stage2阶段后门程序</h4><p>Stage2阶段后门程序的加载过程如下图所示：</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/1.svg"></p>
+<p>首先，检查Stage2阶段后门程序文件头里的相关字段是否满足以下条件：</p>
+<p>1）前 4 个字节是否是 ELF 文件特有的值；</p>
+<p>2）检查文件头的 e_type 字段来判断文件类型是否是可执行文件或者动态库文件；</p>
+<p>3）检查 e_ehsize 字段判断文件的 ELF 头大小是否是 0x34。</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/9.png"></p>
+<p>然后，遍历程序头表获取可加载段的大小，根据加载段的大小创建匿名映射空间，根据程序头表中的段属性设置映射空间的内存页属性。</p>
+<p>接下来，准备第二阶段后门程序启动的栈环境，把Stage1阶段的后门程序启动的栈环境保存到当前函数栈中，然后修改其中的启动参数个数、启动参数内容为Stage2阶段的后门阶段程序对应的值。</p>
+<p>之后，将自身文件头部分的程序头表虚拟地址、程序头表数量、程序头大小、起始段的虚拟地址改成Stage2阶段后门程序的值。</p>
+<p>最后，将栈顶指针的值设置为内容被修改后的栈地址，然后跳转到Stage2阶段后门程序的入口点，完成后门的加载。</p>
+<h3 id="4-3-Stage2阶段后门程序"><a href="#4-3-Stage2阶段后门程序" class="headerlink" title="4.3  Stage2阶段后门程序"></a>4.3  Stage2阶段后门程序</h3><p>Stage2阶段后门的功能有两个：一是端口监听功能，等待攻击者连接并控制，二是回连 C2 功能，执行 C2 下发的命令。</p>
+<p>在端口监听处理逻辑中，Stage2阶段后门会使用 AES 算法对收发的数据进行加解密，解密用到的 iv 从接收数据中取出，加密使用的 iv 也会附带到发送的数据中。</p>
+<p>在回连 C2 处理逻辑中，消息加解密算法由 C2 指定。Stage2阶段后门与 C2 建立连接后，会先协商消息加解密算法。C2 会发送给Stage2阶段后门一段未加密的数据，里面包含了加密方式。Stage2阶段后门读取其中 DEK-Info 的值来确定与 C2 后续通信所使用的加解密算法，并对加解密用到的iv进行相应的初始化。后门支持的加密算法包括：DES-EDE3-CBC、DES-CBC、AES-128-CBC、AES-192-CBC、AES-256-CBC等。</p>
+<h4 id="4-3-1-端口监听"><a href="#4-3-1-端口监听" class="headerlink" title="4.3.1 端口监听"></a>4.3.1 端口监听</h4><p>后门获取系统启动到现在经过的时间，计算之后得到 16 字节的数据，取最后两个字节作为一个 int 值的高两字节，低两字节补 0，然后除以 10000 取余，再加上 30000 ，最后得到一个范围为 30000~40000 的端口。这个端口被用作监听端口。监听端口号会被后门上报给 C2，这意味着C2具备所有被植入后门的设备的IP和开启的监听端口号这些信息，可视为一定规模的肉鸡共识。</p>
+<p>后门会执行Shell指令修改修改系统防火墙配置，使得新增的监听端口可正常访问。执行的 iptables 命令如下所示（其中 %d 为监听的端口号）：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">iptables -t nat -I PREROUTING -p tcp --dport %d -j ACCEPT</span><br><span class="line">iptables -I INPUT -p tcp --dport %d -j ACCEPT</span><br><span class="line">iptables -I OUTPUT -p tcp --sport %d -j ACCEPT</span><br><span class="line">iptables -t nat -I POSTROUTING -p tcp --sport %d -j ACCEPT</span><br></pre></td></tr></table></figure>
+<p>监听端口遵守特定的通信协议，详见4.3.3节。</p>
+<h4 id="4-3-2-C2回连"><a href="#4-3-2-C2回连" class="headerlink" title="4.3.2 C2回连"></a>4.3.2 C2回连</h4><p>后门程序会主动连接 C2，C2 地址通过Stage2阶段后门的启动参数传入。Stage2阶段后门在收到 C2 响应的数据后会进行解密，解密后的数据符合特定的通信协议格式要求，详见4.3.3节。</p>
+<h4 id="4-3-3-通信协议"><a href="#4-3-3-通信协议" class="headerlink" title="4.3.3 通信协议"></a>4.3.3 通信协议</h4><p>无论是处理监听到的数据，还是处理回连C2时接收的C2响应数据，Stage2阶段后门程序都会遵守特定的通信协议。整体上的信息格式为：</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/10.png"></p>
+<p>Stage2阶段后门根据指令码的不同，选择不同的指令载荷处理逻辑。</p>
+<p>程序所使用的指令和功能如下表所示(其中蓝色部分为主要功能)。</p>
+<table>
+<thead>
+<tr>
+<th>指令码</th>
+<th>指令功能</th>
+<th>端口监听</th>
+<th>回连C2</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0x00</td>
+<td>加密特定格式的数据(第一个字节为0x01)，以及客户端 ip 和监听端口并返回给客户端</td>
+<td>✓</td>
+<td></td>
+</tr>
+<tr>
+<td>0x01</td>
+<td>更改当前连接到 C2 的端口，连接到 C2 的指定端口</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x02</td>
+<td>加密特定格式的数据(第一个字节为0x03)并返回给客户端</td>
+<td>✓</td>
+<td></td>
+</tr>
+<tr>
+<td>0x04</td>
+<td>加密特定格式的数据(第一个字节为0x05)，以及32字节的随机数并返回给给客户端</td>
+<td>✓</td>
+<td></td>
+</tr>
+<tr>
+<td>0x06</td>
+<td>向指定IP地址和端口发送心跳包</td>
+<td>✓</td>
+<td></td>
+</tr>
+<tr>
+<td>0x07</td>
+<td>加密返回三次特定格式的数据(第一个字节值分别0x0F，0x0D，0x11)并返回给客户端</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x09</td>
+<td>回连到指定的IP地址并提供功能选择</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x0B</td>
+<td>加密特定格式的数据(第一个字节为0x0D) 并返回给客户端</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x0C</td>
+<td>加密特定格式的数据(第一个字节为0x0F)并返回给客户端</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x0D</td>
+<td>加密特定格式的数据(第一个字节为0x0E)并返回给客户端	✓</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>0x0E</td>
+<td>保存一部分接收数据，加密特定格式的数据(第一个字节为0x0F) 并返回给客户端</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x0F</td>
+<td>加密特定格式的数据(第一个字节为0x10)并返回给客户端</td>
+<td>✓</td>
+<td></td>
+</tr>
+<tr>
+<td>0x10</td>
+<td>保存一部分接收数据</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x11</td>
+<td>返回历史命令</td>
+<td>✓</td>
+<td></td>
+</tr>
+<tr>
+<td>0x12</td>
+<td>提供 0x14 到 0x28 指令选择</td>
+<td></td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x14</td>
+<td>解密接收数据，返回解密后的内容</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x15</td>
+<td>收集信息并发送给指定地址</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x16</td>
+<td>记录接收数据中的 ip</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x17</td>
+<td>连接到指定地址，提供其它的功能选择</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x18</td>
+<td>保存指令，发送当前接收内容到之前保存的地址</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x19</td>
+<td>开启 socks5 代理</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x1A</td>
+<td>调用 system函数执行系统命令</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x1B</td>
+<td>远程命令执行</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x1C</td>
+<td>将接收数据发送给回连的 C2</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x1D</td>
+<td>发送数据到指定的地址</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x1E</td>
+<td>检验加解密功能是否正常</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x1F</td>
+<td>收集信息并发送给指定地址，加密特定格式的数据(第一个字节为0x1F)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x20</td>
+<td>记录接收数据中的 ip，加密特定格式的数据(第一个字节为0x20)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x21</td>
+<td>连接到指定地址，提供其它的功能选择	✓	✓</td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td>0x22</td>
+<td>加密特定格式的数据(第一个字节为0x22)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x23</td>
+<td>开启 Socks5 代理，加密特定格式的数据(第一个字节为0x23)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x24</td>
+<td>调用 system() 执行命令，加密特定格式的数据(第一个字节为0x24)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x25</td>
+<td>远程命令执行，加密特定格式的数据(第一个字节为0x25)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x26</td>
+<td>将接收数据的发送到回连的 C2，加密特定格式的数据(第一个字节为0x26)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x27</td>
+<td>发送数据到指定的地址，加密特定格式的数据(第一个字节为0x27)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+<tr>
+<td>0x28</td>
+<td>检验加解密功能是否正常，加密特定格式的数据(第一个字节为0x28)并返回给客户端</td>
+<td>✓</td>
+<td>✓</td>
+</tr>
+</tbody></table>
+<p>大部分指令都会加密发送特定格式的数据，其中第一个字节根据不同的指令对应不同的值。数据格式如下：</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/2.svg"></p>
+<h4 id="4-3-4-关键功能说明"><a href="#4-3-4-关键功能说明" class="headerlink" title="4.3.4 关键功能说明"></a>4.3.4 关键功能说明</h4><h5 id="4-3-4-1-上传历史命令"><a href="#4-3-4-1-上传历史命令" class="headerlink" title="4.3.4.1 上传历史命令"></a>4.3.4.1 上传历史命令</h5><p>当指令码为 0x11 时，Stage2阶段后门会将历史命令发送给通信对端。</p>
+<p>后门在执行指令时，会使用一个双向链表来保存接收数据的前8个字节以及当前时间。</p>
+<p>双向链表容量为10，一共可以保存10个节点（也就是10 条历史指令）。如果超过 10 个，会先根据保存时间删除最早插入的节点，然后再添加新节点。</p>
+<p>另外，后门在执行指令时会提前遍历链表，如果链表中已经存在相同的指令，不会重复执行指令。</p>
+<h5 id="4-3-4-2-信息收集"><a href="#4-3-4-2-信息收集" class="headerlink" title="4.3.4.2 信息收集"></a>4.3.4.2 信息收集</h5><p>如果指令码为 0x1F，Stage2阶段后门会启动信息收集功能。<br>首先，Stage2阶段后门从接收的数据中取出要连接的IP地址和端口并发起网络连接。连接成功后，准备要发送的数据，之后加密发送数据。发送的数据包括但不限于：</p>
+<p>●后门所监听的端口</p>
+<p>●向后门监听端口发起连接的IP地址</p>
+<p>●后门程序运行时间</p>
+<p>●socks5 代理端口</p>
+<p>●系统的主机名</p>
+<p>●cpu 信息</p>
+<p>●内存信息</p>
+<p>●mac 地址</p>
+<p>●cpu 架构</p>
+<h5 id="4-3-4-3-Socks5-代理"><a href="#4-3-4-3-Socks5-代理" class="headerlink" title="4.3.4.3 Socks5 代理"></a>4.3.4.3 Socks5 代理</h5><p>如果指令码为 0x23，Stage2阶段后门会使用 libevent 启动Socks5代理功能，同时会利用iptables 命令修改防火墙配置。代理端口是从指令载荷中获取。代理实现的过程如下：</p>
+<p><img src="/../pic/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/11.png"></p>
+<p>Stage2阶段后门监听指定端口，客户端连接该端口。TCP握手成功之后，客户端开始 Socks5 的请求阶段握手，握手会检查数据格式是否满足 Socks5 协议格式，若握手通过则正式建立连接。</p>
+<p>连接建立后，客户端向Socks5端口发送 Socks5 格式的数据包。Stage2阶段后门接收到数据包后从中提取出目标 B 的 ip，然后与目标 B 建立连接，连接上的话会返回目标的 ip 和端口给 A。</p>
+<p>程序到此时这部分会有两个套接字，一个是连接 A 的，另一个是连接 B 的，之后如果收到了数据，会通过检查套接字确定数据来源，然后直接转发给另一个套接字连接的设备。</p>
+<h5 id="4-3-4-4-无回显命令执行"><a href="#4-3-4-4-无回显命令执行" class="headerlink" title="4.3.4.4 无回显命令执行"></a>4.3.4.4 无回显命令执行</h5><p>如果指令码为0x24，Stage2阶段后门从指令载荷中取出待执行的系统命令字符串，然后调用 system函数执行，执行结果不回传。</p>
+<h5 id="4-3-4-5-交互式Shell"><a href="#4-3-4-5-交互式Shell" class="headerlink" title="4.3.4.5 交互式Shell"></a>4.3.4.5 交互式Shell</h5><p>如果指令码为 0x25，Stage2阶段后门会开启交互式Shell。</p>
+<p>首先，Stage2阶段后门从指令载荷中取出 ip 地址和端口并进行连接。若连接成功，则使用 open(“&#x2F;dev&#x2F;ptmx”, 2)命令创建一个伪终端，再使用子进程打开一个交互式 shell，之后接收数据，解密之后写入伪终端，然后从伪终端中读取结果，加密后发送给目标。</p>
+<p>如果每一步都顺利完成，并且接收的数据中没有 “exit\n” 字符串，那么就保持连接，否则结束连接。</p>
+<h5 id="4-3-4-6-加解密功能检查"><a href="#4-3-4-6-加解密功能检查" class="headerlink" title="4.3.4.6 加解密功能检查"></a>4.3.4.6 加解密功能检查</h5><p>如果指令码为0x28，Stage2阶段后门会进行加解密功能检查。</p>
+<p>后门从指令载荷中提取的4 组 ip 里随机选择一个并连接，连接上之后会经过几次数据交换。</p>
+<p>第一次发送一些随机数，然后接收。</p>
+<p>第二次发送，发送的内容会先进行加密，加密使用的是一组随机数，发送的内容包括加密的结果以及加密使用的随机数以及一个新的随机数 A。发送之后等待接收，接收之后进行解密，然后对比第一个字节和随机数 A 是否相同，如果相同就继续，如果不相同就结束通信。</p>
+<p>第三次发送，发送前进行加密，加密内容为一串字符串拼接上”mips”，发送也会把加密用的随机数发送过去。之后接收后进行解密，检查解密后的结果与加密的内容是否一致。然后再次接收，如果收到的内容解密后为 0x0002FFFF 则结束。</p>
+<p>这个部分的功能主要是发送加密的数据，然后解密接收的数据，对比加密前后解密后的结果是否一致，并且加密的内容是一些随机生成的数，解密之后也没有对数据做其它处理，只用来做了对比，所以这个部分应该是用来检查后门的加解密功能是否能正常使用。</p>
+<h2 id="0x05-威胁框架视角的攻击映射"><a href="#0x05-威胁框架视角的攻击映射" class="headerlink" title="0x05 威胁框架视角的攻击映射"></a>0x05 威胁框架视角的攻击映射</h2><p>样本的攻击活动共涉及 ATT&amp;CK 框架中8个阶段的12个技术点，具体行为描述如下：</p>
+<table>
+<thead>
+<tr>
+<th>ATT&amp;CK阶段</th>
+<th>具体行为</th>
+<th>注释</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>资源开发</td>
+<td>入侵基础设施</td>
+<td>入侵服务器或 IOT 设备作为跳板</td>
+</tr>
+<tr>
+<td>初始访问</td>
+<td>利用面向公众的应用程序</td>
+<td>利用暴露在公网中且存在漏洞的应用服务</td>
+</tr>
+<tr>
+<td>执行</td>
+<td>利用命令和脚本解释器</td>
+<td>获取权限后利用shell脚本安装后续木马</td>
+</tr>
+<tr>
+<td>防御规避</td>
+<td>仿冒</td>
+<td>落地进程名仿冒成正常系统文件</td>
+</tr>
+<tr>
+<td>发现</td>
+<td>发现账户</td>
+<td>获取系统账户信息</td>
+</tr>
+<tr>
+<td></td>
+<td>发现系统信息</td>
+<td>获取系统版本信息</td>
+</tr>
+<tr>
+<td></td>
+<td>发现系统网络配置</td>
+<td>获取系统网络信息</td>
+</tr>
+<tr>
+<td>收集</td>
+<td>压缩&#x2F;加密收集的数据</td>
+<td>收集到的数据通过异或后加 AES 加密</td>
+</tr>
+<tr>
+<td>命令与控制</td>
+<td>编码数据</td>
+<td>收集到的数据通讯前经过加密</td>
+</tr>
+<tr>
+<td></td>
+<td>使用标准非应用层协议</td>
+<td>使用 TCP 协议通讯</td>
+</tr>
+<tr>
+<td></td>
+<td>代理</td>
+<td>使用 socks5 代理</td>
+</tr>
+<tr>
+<td>数据渗出</td>
+<td>使用 C2 信道回传</td>
+<td>远控使用传统 C2 信道通讯</td>
+</tr>
+</tbody></table>
+<h2 id="0x06-总结"><a href="#0x06-总结" class="headerlink" title="0x06 总结"></a>0x06 总结</h2><p>从后门程序的实现来看，Kworker22 是一个功能比较全的后门程序，在网络通信部分通过 libevent 网络库实现网络操作，保障网络通信的性能和稳定。另外，后门通信支持多种加密算法，这样极大增加了通信数据包的解密成本。</p>
+<p>从维护方面来看，攻击者有很大可能会继续开发相关的恶意程序，增加其它功能。我们在分析的过程中发现第一阶段样本不仅实现了可执行文件的加载，还实现了动态库的加载，但是目前没有发现相关的动态库格式文件。另外通过模仿 shell 脚本中的下载命令向 C2 服务器发送请求时，还发现了其它的 shell 脚本，不过脚本里有的下载链接已经失效，可能是已经使用过或者还未使用的样本。</p>
+<p>目前，该攻击活动仍在活跃中，我们将会持续跟进分析。</p>
+</article><div class="post-copyright"><div class="post-copyright__author"><span class="post-copyright-meta"><i class="fas fa-circle-user fa-fw"></i>文章作者: </span><span class="post-copyright-info"><a href="https://ddk9318.github.io">ddk9318</a></span></div><div class="post-copyright__type"><span class="post-copyright-meta"><i class="fas fa-square-arrow-up-right fa-fw"></i>文章链接: </span><span class="post-copyright-info"><a href="https://ddk9318.github.io/2024/09/02/Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90/">https://ddk9318.github.io/2024/09/02/Kworker-后门程序分析/</a></span></div><div class="post-copyright__notice"><span class="post-copyright-meta"><i class="fas fa-circle-exclamation fa-fw"></i>版权声明: </span><span class="post-copyright-info">本博客所有文章除特别声明外，均采用 <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/" target="_blank">CC BY-NC-SA 4.0</a> 许可协议。转载请注明来自 <a href="https://ddk9318.github.io" target="_blank">ddk9318</a>！</span></div></div><div class="tag_share"><div class="post-meta__tag-list"></div><div class="post_share"><div class="social-share" data-image="/img/small%20hali.png" data-sites="facebook,twitter,wechat,weibo,qq"></div><link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.3/sharejs/dist/css/share.min.css" media="print" onload="this.media='all'"><script src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.3/sharejs/dist/js/social-share.min.js" defer></script></div></div><nav class="pagination-post" id="pagination"><div class="next-post pull-full"><a href="/2024/09/02/Fodcha-%E5%83%B5%E5%B0%B8%E7%BD%91%E7%BB%9C%E6%A0%B7%E6%9C%AC/" title="Fodcha 僵尸网络样本"><div class="cover" style="background: var(--default-bg-color)"></div><div class="pagination-info"><div class="label">下一篇</div><div class="next_info">Fodcha 僵尸网络样本</div></div></a></div></nav></div><div class="aside-content" id="aside-content"><div class="card-widget card-info"><div class="is-center"><div class="avatar-img"><img src="/img/small%20hali.png" onerror="this.onerror=null;this.src='/img/friend_404.gif'" alt="avatar"/></div><!--.author-info__name= config.author--><!--.author-info__description!= theme.aside.card_author.description || config.description--></div><div class="card-info-data site-data is-center"><a href="/archives/"><div class="headline">文章</div><div class="length-num">6</div></a><!--头像下的标签跳转--><!--a(href=url_for(config.tag_dir) + '/').headline= _p('aside.tags')
+.length-num= site.tags.length--><!--a().headline= _p('aside.tags')
+.length-num= site.tags.length
+--><!--头像下的分类跳转--><!--a(href=url_for(config.category_dir) + '/').headline= _p('aside.categories') 
+.length-num= site.categories.length--><!--a(href=url_for(config.category_dir) + '/').headline= _p('aside.categories') 
+.length-num= site.categories.length
+--></div></div><div class="sticky_layout"><div class="card-widget" id="card-toc"><div class="item-headline"><i class="fas fa-stream"></i><span>目录</span><span class="toc-percentage"></span></div><div class="toc-content"><ol class="toc"><li class="toc-item toc-level-1"><a class="toc-link" href="#Kworker-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90"><span class="toc-text">Kworker 后门程序分析</span></a><ol class="toc-child"><li class="toc-item toc-level-2"><a class="toc-link" href="#0x01-%E6%91%98%E8%A6%81"><span class="toc-text">0x01 摘要</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x02-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E6%A6%82%E8%A7%88"><span class="toc-text">0x02 后门程序概览</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x04-%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F%E5%88%86%E6%9E%90"><span class="toc-text">0x04 后门程序分析</span></a><ol class="toc-child"><li class="toc-item toc-level-3"><a class="toc-link" href="#4-1-Kworker22-%E7%9A%84%E5%B7%A5%E4%BD%9C%E8%BF%87%E7%A8%8B"><span class="toc-text">4.1 Kworker22 的工作过程</span></a></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-2-Stage1%E9%98%B6%E6%AE%B5%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F"><span class="toc-text">4.2 Stage1阶段后门程序</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#4-2-1-%E5%89%8D%E6%9C%9F%E5%87%86%E5%A4%87%E5%B7%A5%E4%BD%9C"><span class="toc-text">4.2.1 前期准备工作</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-2-2-C2%E4%BA%A4%E4%BA%92"><span class="toc-text">4.2.2  C2交互</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-2-3-%E5%8A%A0%E8%BD%BDStage2%E9%98%B6%E6%AE%B5%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F"><span class="toc-text">4.2.3 加载Stage2阶段后门程序</span></a></li></ol></li><li class="toc-item toc-level-3"><a class="toc-link" href="#4-3-Stage2%E9%98%B6%E6%AE%B5%E5%90%8E%E9%97%A8%E7%A8%8B%E5%BA%8F"><span class="toc-text">4.3  Stage2阶段后门程序</span></a><ol class="toc-child"><li class="toc-item toc-level-4"><a class="toc-link" href="#4-3-1-%E7%AB%AF%E5%8F%A3%E7%9B%91%E5%90%AC"><span class="toc-text">4.3.1 端口监听</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-3-2-C2%E5%9B%9E%E8%BF%9E"><span class="toc-text">4.3.2 C2回连</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-3-3-%E9%80%9A%E4%BF%A1%E5%8D%8F%E8%AE%AE"><span class="toc-text">4.3.3 通信协议</span></a></li><li class="toc-item toc-level-4"><a class="toc-link" href="#4-3-4-%E5%85%B3%E9%94%AE%E5%8A%9F%E8%83%BD%E8%AF%B4%E6%98%8E"><span class="toc-text">4.3.4 关键功能说明</span></a><ol class="toc-child"><li class="toc-item toc-level-5"><a class="toc-link" href="#4-3-4-1-%E4%B8%8A%E4%BC%A0%E5%8E%86%E5%8F%B2%E5%91%BD%E4%BB%A4"><span class="toc-text">4.3.4.1 上传历史命令</span></a></li><li class="toc-item toc-level-5"><a class="toc-link" href="#4-3-4-2-%E4%BF%A1%E6%81%AF%E6%94%B6%E9%9B%86"><span class="toc-text">4.3.4.2 信息收集</span></a></li><li class="toc-item toc-level-5"><a class="toc-link" href="#4-3-4-3-Socks5-%E4%BB%A3%E7%90%86"><span class="toc-text">4.3.4.3 Socks5 代理</span></a></li><li class="toc-item toc-level-5"><a class="toc-link" href="#4-3-4-4-%E6%97%A0%E5%9B%9E%E6%98%BE%E5%91%BD%E4%BB%A4%E6%89%A7%E8%A1%8C"><span class="toc-text">4.3.4.4 无回显命令执行</span></a></li><li class="toc-item toc-level-5"><a class="toc-link" href="#4-3-4-5-%E4%BA%A4%E4%BA%92%E5%BC%8FShell"><span class="toc-text">4.3.4.5 交互式Shell</span></a></li><li class="toc-item toc-level-5"><a class="toc-link" href="#4-3-4-6-%E5%8A%A0%E8%A7%A3%E5%AF%86%E5%8A%9F%E8%83%BD%E6%A3%80%E6%9F%A5"><span class="toc-text">4.3.4.6 加解密功能检查</span></a></li></ol></li></ol></li></ol></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x05-%E5%A8%81%E8%83%81%E6%A1%86%E6%9E%B6%E8%A7%86%E8%A7%92%E7%9A%84%E6%94%BB%E5%87%BB%E6%98%A0%E5%B0%84"><span class="toc-text">0x05 威胁框架视角的攻击映射</span></a></li><li class="toc-item toc-level-2"><a class="toc-link" href="#0x06-%E6%80%BB%E7%BB%93"><span class="toc-text">0x06 总结</span></a></li></ol></li></ol></div></div></div></div></main><footer id="footer"><div id="footer-wrap"><div class="copyright">&copy;2020 - 2024 By ddk9318</div><div class="framework-info"><span>框架 </span><a target="_blank" rel="noopener" href="https://hexo.io">Hexo</a><span class="footer-separator">|</span><span>主题 </span><a target="_blank" rel="noopener" href="https://github.com/jerryc127/hexo-theme-butterfly">Butterfly</a></div></div></footer></div><div id="rightside"><div id="rightside-config-hide"><button id="readmode" type="button" title="阅读模式"><i class="fas fa-book-open"></i></button><button id="darkmode" type="button" title="浅色和深色模式转换"><i class="fas fa-adjust"></i></button><button id="hide-aside-btn" type="button" title="单栏和双栏切换"><i class="fas fa-arrows-alt-h"></i></button></div><div id="rightside-config-show"><button id="rightside-config" type="button" title="设置"><i class="fas fa-cog fa-spin"></i></button><button class="close" id="mobile-toc-button" type="button" title="目录"><i class="fas fa-list-ul"></i></button><button id="go-up" type="button" title="回到顶部"><span class="scroll-percent"></span><i class="fas fa-arrow-up"></i></button></div></div><div><script src="/js/utils.js?v=4.13.0"></script><script src="/js/main.js?v=4.13.0"></script><script src="https://cdn.jsdelivr.net/npm/@fancyapps/ui@5.0.33/dist/fancybox/fancybox.umd.min.js"></script><div class="js-pjax"></div><script defer="defer" id="fluttering_ribbon" mobile="false" src="https://cdn.jsdelivr.net/npm/butterfly-extsrc@1.1.3/dist/canvas-fluttering-ribbon.min.js"></script></div></body></html>
